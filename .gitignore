@@ -30,6 +30,12 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+vcpkg/
+as
+out/
+_build/
+common/
+googletest/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
