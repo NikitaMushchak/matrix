@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <chrono>
 
+
 #define NUM_THREADS 4
 #define NUM_START 1
 #define NUM_END 10
@@ -274,8 +275,63 @@ TEST(TransposeBlockOpenMP, second) {
 
     ASSERT_EQ(resomp, resa);
 }
+TEST(TransposeBlockOpenMP, third) {
+    Matrix<int> a(16, 16);
+    a.fillRand(1, 10);
+    Matrix<int> b;
+    b = a;
+    ASSERT_EQ(a, b);
+    Matrix<int> c;
+    c.TSPOSE(a);
+
+    Matrix<int> s(16, 16);
+    for (size_t i = 0; i < s.GetMaxRows(); ++i)
+        for (size_t j = 0; j < s.GetMaxCols(); ++j)
+            s[i * s.GetMaxCols() + j] = a[j * a.GetMaxCols() + i];
+
+    ASSERT_EQ(s, c);
+}
+TEST(Simplemult3TEST, first) {
+    Matrix<int> a(5, 2);
+    Matrix<int> b(2, 10);
+    a.fillValue(10);
+    b.fillValue(2);
+    Matrix<int>c;
+    c.simpleMult3(a, b);
+    Matrix<int> res(5, 10);
+    res.fillValue(40);
+    ASSERT_EQ(res, c);
+}
+TEST(Simplemult3TEST, second) {
+    Matrix<int> a(512, 512);
+    a.fillRand(1, 10000);
+    Matrix<int> b(512, 512);
+    b.fillRand(1, 10000);
+    Matrix<int> resa;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    resa.simpleMult(a,b);
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    Matrix<int> resomp;
+    auto starta = std::chrono::high_resolution_clock::now();
+    resomp.simpleMult3(a,b);
+    auto finisha = std::chrono::high_resolution_clock::now();
+
+    std::cout << " Duration of seq method = " <<
+        std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() << " miccosec\n";
+
+    std::cout << " Duration of omp method = " <<
+        std::chrono::duration_cast<std::chrono::microseconds>(finisha - starta).count() << " miccosec\n";
+
+    std::cout << "Accleration : " << std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count() /
+        std::chrono::duration_cast<std::chrono::microseconds>(finisha - starta).count() << " times\n";
+
+    ASSERT_EQ(resomp, resa);
+}
 
 int main(int arg_v, char** arg_c) {
+    //test1(arg_v, arg_c);
     testing::InitGoogleTest(&arg_v, arg_c);
     return RUN_ALL_TESTS();
 }

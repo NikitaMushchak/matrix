@@ -1,106 +1,343 @@
-// includes CUDA Runtime
-#include <cuda_runtime.h>
-#include "device_launch_parameters.h"
-// includes, project
-#include <helper_cuda.h>
-#include <helper_functions.h> // helper utility functions 
-#include <random>
-#include <omp.h>
-__global__ void increment_kernel(int *g_data, int inc_value)
+#define BLOCK_SIZE 128
+#include "Matrix.cpp" 
+#include <stdlib.h>
+#include <stdio.h>
+template<class T>
+class FastMatrix: public Matrix<T>
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    g_data[idx] = g_data[idx] + inc_value;
-}
+public:
+    FastMatrix() : Matrix<T>() {}
+    FastMatrix(size_t N, size_t M) : Matrix<T>(N, M) { std::cerr << "create fast matrix!\n"; }
+    virtual ~FastMatrix() { std::cerr << "Destructor fastmatrix!\n"; };
 
-bool correct_output(int *data, const int n, const int x)
-{
-    for (int i = 0; i < n; i++)
-        if (data[i] != x)
-        {
-            printf("Error! data[%d] = %d, ref = %d\n", i, data[i], x);
-            return false;
+    FastMatrix& CUDAMultiply(const FastMatrix& matr1, const FastMatrix& matr2);
+
+};
+
+template<class T>
+FastMatrix<T>& FastMatrix<T>::CUDAMultiply(const FastMatrix& matr1, const FastMatrix& matr2){
+    if (matr1.GetMaxCols() != matr2.GetMaxRows())
+        throw std::exception("thease matricies is cannot be multiplied!");
+    //TODO - Make setters in parent class
+    this->SetMaxRows(matr1.GetMaxRows());
+    this->SetMaxCols(matr2.GetMaxCols());
+    this->SetLenth(matr1.GetMaxRows(), matr2.GetMaxCols());
+    this->AllocateMatr(matr1.GetMaxRows() * matr2.GetMaxCols());
+    T dat;
+    size_t i, j, k;
+    for (i = 0; i < matr1.GetMaxRows(); i++) {
+        for (j = 0; j < matr2.GetMaxCols(); j++) {
+            dat = 0;
+            for (k = 0; k < matr1.GetMaxCols(); k++) {
+                dat+= matr1[i * matr1.GetMaxCols() + k] * matr2[k * matr2.GetMaxCols() + j];
+            }
+            this->AddData(dat, i ,j);
         }
-
-    return true;
+    }
+    return *this;
 }
 
-int test1(int argc, char *argv[])
+
+__global__ void kernel_global(float* a, float* b, int n, float* c, int k)
 {
-    int devID;
-    cudaDeviceProp deviceProps;
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
 
-    printf("[%s] - Starting...\n", argv[0]);
+    //for ( int j = 0; j < n; j++ ) sum += a [j + t*n] * b [k + j*n]; 
+    //c[k+t*n]=sum;
 
-    // This will pick the best possible CUDA capable device
-    devID = findCudaDevice(argc, (const char **)argv);
+  //   Transp a
+    for (int j = 0; j < n; j++) sum += a[t + j * n] * b[k + j * n];
+    c[t + k * n] = sum;
 
-    // get device name
-    checkCudaErrors(cudaGetDeviceProperties(&deviceProps, devID));
-    printf("CUDA device [%s]\n", deviceProps.name);
+}
 
-    int n = 16 * 1024 * 1024;
-    int nbytes = n * sizeof(int);
-    int value = 26;
+// Matrix multiplication
 
-    // allocate host memory
-    int *a = 0;
-    checkCudaErrors(cudaMallocHost((void **)&a, nbytes));
-    memset(a, 0, nbytes);
 
-    // allocate device memory
-    int *d_a=0;
-    checkCudaErrors(cudaMalloc((void **)&d_a, nbytes));
-    checkCudaErrors(cudaMemset(d_a, 255, nbytes));
 
-    // set kernel launch configuration
-    dim3 threads = dim3(512, 1);
-    dim3 blocks  = dim3(n / threads.x, 1);
-
-    // create cuda event handles
+FILE* out, * out1, * out2;
+void testglob()
+{
+    int N = 1024;
+    int m, n, k;
+    float timerValueGPU, timerValueCPU;
     cudaEvent_t start, stop;
-    checkCudaErrors(cudaEventCreate(&start));
-    checkCudaErrors(cudaEventCreate(&stop));
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 
-    StopWatchInterface *timer = NULL;
-    sdkCreateTimer(&timer);
-    sdkResetTimer(&timer);
 
-    checkCudaErrors(cudaDeviceSynchronize());
-    float gpu_time = 0.0f;
 
-    // asynchronously issue work to the GPU (all to stream 0)
-    sdkStartTimer(&timer);
-    cudaEventRecord(start, 0);
-    cudaMemcpyAsync(d_a, a, nbytes, cudaMemcpyHostToDevice, 0);
-    //increment_kernel< < <blocks, threads, 0, 0> > >(d_a, value);
-    cudaMemcpyAsync(a, d_a, nbytes, cudaMemcpyDeviceToHost, 0);
-    cudaEventRecord(stop, 0);
-    sdkStopTimer(&timer);
+    int numBytes = N * N * sizeof(float);
+    float* adev, * bdev, * cdev, * a, * b, * c, * cc, * bT, * aT;
 
-    // have CPU do some work while waiting for stage 1 to finish
-    unsigned long int counter=0;
+    a = (float*)malloc(numBytes);
+    b = (float*)malloc(numBytes);
+    bT = (float*)malloc(numBytes);
+    aT = (float*)malloc(numBytes);
+    c = (float*)malloc(numBytes);
+    cc = (float*)malloc(numBytes);
 
-    while (cudaEventQuery(stop) == cudaErrorNotReady)
+    for (n = 0; n < N; n++)
     {
-        counter++;
+        for (m = 0; m < N; m++)
+        {
+            a[m + n * N] = sinf(m) + cosf(n);
+            b[m + n * N] = cosf(m) - sinf(n);
+            aT[n + m * N] = a[m + n * N];
+            bT[n + m * N] = b[m + n * N];
+        }
     }
 
-    checkCudaErrors(cudaEventElapsedTime(&gpu_time, start, stop));
+    dim3 threads(BLOCK_SIZE);
+    dim3 blocks(N / threads.x);
 
-    // print the cpu and gpu times
-    printf("time spent executing by the GPU: %.2f\n", gpu_time);
-    printf("time spent by CPU in CUDA calls: %.2f\n", sdkGetTimerValue(&timer));
-    printf("CPU executed %lu iterations while waiting for GPU to finish\n", counter);
+    cudaMalloc((void**)&adev, numBytes);	// allocate DRAM
+    cudaMalloc((void**)&bdev, numBytes); // allocate DRAM
+    cudaMalloc((void**)&cdev, numBytes); // allocate DRAM
 
-    // check the output for correctness
-    bool bFinalResults = correct_output(a, n, value);
+    cudaEventRecord(start, 0);
+    // copy from CPU to DRAM
+    cudaMemcpy(adev, aT, numBytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(bdev, b, numBytes, cudaMemcpyHostToDevice);
 
-    // release resources
-    checkCudaErrors(cudaEventDestroy(start));
-    checkCudaErrors(cudaEventDestroy(stop));
-    checkCudaErrors(cudaFreeHost(a));
-    checkCudaErrors(cudaFree(d_a));
-    char s;
-     std::cin >> s;
-    exit(bFinalResults ? EXIT_SUCCESS : EXIT_FAILURE);
+    // cudaEventRecord(start, 0);
+    for (k = 0; k < N; k++)
+    {
+        kernel_global << <blocks, threads >> > (adev, bdev, N, cdev, k);
+        cudaThreadSynchronize();
+    }
+    // cudaEventRecord(stop, 0);
+    // cudaEventSynchronize(stop); 
+
+    cudaMemcpy(c, cdev, numBytes, cudaMemcpyDeviceToHost);
+
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&timerValueGPU, start, stop);
+
+    printf("\n GPU calculation time %f msec\n", timerValueGPU);
+
+    // CPU ---------------------------------------------------------------
+    cudaEventRecord(start, 0);
+
+    for (n = 0; n < N; n++)
+    {
+        for (m = 0; m < N; m++)
+        {
+            cc[m + n * N] = 0.f;
+            //for(k=0;k<N;k++) cc[m+n*N]+=a[k+n*N]*bT[k+m*N]; //best CPU performance
+            for (k = 0; k < N; k++) cc[m + n * N] += a[k + n * N] * b[m + k * N]; // poor variant
+        }
+    }
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&timerValueCPU, start, stop);
+
+    printf("\n CPU calculation time %f msec\n", timerValueCPU);
+    printf("\n Rate %f x\n", timerValueCPU / timerValueGPU);
+
+    /*
+    out=fopen("c_gpu.dat","w"); out1=fopen("c_cpu.dat","w");// out2=fopen("b.dat","w");
+    for(n=0;n<N;n++)
+    {for(m=0;m<N;m++)
+     {fprintf(out,"%e ",c[m+n*N]);
+     // fprintf(out,"%e ",c[n+m*N]); // transp
+      fprintf(out1,"%e ",cc[m+n*N]);
+    //  fprintf(out2,"%e ",b[m+n*N]);
+     }
+     fprintf(out,"\n"); fprintf(out1,"\n"); //fprintf(out2,"\n");
+    }
+    fclose(out);  fclose(out1); //fclose(out2);
+   */
+
+    cudaFree(adev);
+    cudaFree(bdev);
+    cudaFree(cdev);
+    free(a);
+    free(b);
+    free(bT);
+    free(aT);
+    free(c);
+    free(cc);
+
+}
+
+
+
+
+// device code
+#define BLOCK_SIZE 16
+
+__global__ void kernel_shared(float* a, float* b,
+    int n, float* c)
+{
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x, ty = threadIdx.y;
+    int aBegin = n * BLOCK_SIZE * by;
+    int aEnd = aBegin + n - 1;
+    int bBegin = BLOCK_SIZE * bx;
+    int aStep = BLOCK_SIZE, bStep = BLOCK_SIZE * n;
+    float sum = 0.0f;
+    __shared__ float as[BLOCK_SIZE][BLOCK_SIZE + 1];
+    __shared__ float bs[BLOCK_SIZE][BLOCK_SIZE + 1];
+
+    for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
+    {
+        as[tx][ty] = a[ia + n * ty + tx];
+        bs[tx][ty] = b[ib + n * ty + tx];
+
+        __syncthreads(); 	// Synchronize to make sure the matrices are loaded 
+        for (int k = 0; k < BLOCK_SIZE; k++) sum += as[k][ty] * bs[tx][k];
+
+        __syncthreads(); 	// Synchronize to make sure submatrices not needed
+    }
+    c[n * BLOCK_SIZE * by + BLOCK_SIZE * bx + n * ty + tx] = sum;
+}
+
+__global__ void kernel_shared_1(float* a, float* b,
+    int n, float* c)
+{
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x, ty = threadIdx.y;
+    int aBegin = n * BLOCK_SIZE * by;
+    int aEnd = aBegin + n - 1;
+    int bBegin = BLOCK_SIZE * bx;
+    int aStep = BLOCK_SIZE, bStep = BLOCK_SIZE * n;
+    float sum = 0.0f;
+    for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
+    {
+        __shared__ float as[BLOCK_SIZE][BLOCK_SIZE];
+        __shared__ float bs[BLOCK_SIZE][BLOCK_SIZE];
+        as[ty][tx] = a[ia + n * ty + tx];
+        bs[ty][tx] = b[ib + n * ty + tx];
+
+        __syncthreads(); 	// Synchronize to make sure the matrices are loaded 
+        for (int k = 0; k < BLOCK_SIZE; k++) sum += as[ty][k] * bs[k][tx];
+
+        __syncthreads(); 	// Synchronize to make sure submatrices not needed
+    }
+    c[n * BLOCK_SIZE * by + BLOCK_SIZE * bx + n * ty + tx] = sum;
+}
+
+__global__ void kernel_global(float* a, float* b,
+    int n, float* c)
+{
+    int   bx = blockIdx.x;
+    int   by = blockIdx.y;
+    int   tx = threadIdx.x;
+    int   ty = threadIdx.y;
+    float sum = 0.0f;
+    int   ia = n * BLOCK_SIZE * by + n * ty;
+    int   ib = BLOCK_SIZE * bx + tx;
+
+    int   ic = n * BLOCK_SIZE * by + BLOCK_SIZE * bx;
+
+    for (int k = 0; k < n; k++) sum += a[ia + k] * b[ib + k * n];
+
+    c[ic + n * ty + tx] = sum;
+}
+
+
+// host code
+
+
+FILE* outsh, * out1sh;
+void testshared()
+{
+    int N = 1024;
+    int m, n, k;
+    float timerValueGPU, timerValueCPU;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    int numBytes = N * N * sizeof(float);
+    float* adev, * bdev, * cdev, * a, * b, * c, * cc, * bT, * aT;
+
+    a = (float*)malloc(numBytes);
+    b = (float*)malloc(numBytes);
+    bT = (float*)malloc(numBytes);
+    aT = (float*)malloc(numBytes);
+    c = (float*)malloc(numBytes);
+    cc = (float*)malloc(numBytes);
+
+    for (n = 0; n < N; n++)
+    {
+        for (m = 0; m < N; m++)
+        {
+            a[m + n * N] = 2.0f * m + n;
+            b[m + n * N] = m - n;
+            aT[m + n * N] = m + n * 2.0f;
+            bT[m + n * N] = n - m;
+        }
+    }
+
+    dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 blocks(N / threads.x, N / threads.y);
+
+    cudaMalloc((void**)&adev, numBytes);	// allocate DRAM
+    cudaMalloc((void**)&bdev, numBytes); // allocate DRAM
+    cudaMalloc((void**)&cdev, numBytes); // allocate DRAM
+    //----------------- GPU
+    cudaEventRecord(start, 0);
+    // copy from CPU to DRAM
+    cudaMemcpy(adev, a, numBytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(bdev, b, numBytes, cudaMemcpyHostToDevice);
+
+    kernel_shared_1 << <blocks, threads >> > (adev, bdev, N, cdev);
+    //kernel_global<<<blocks, threads>>> ( adev, bdev, N, cdev ); 
+    cudaMemcpy(c, cdev, numBytes, cudaMemcpyDeviceToHost);
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&timerValueGPU, start, stop);
+    printf("\n GPU calculation time %f msec\n", timerValueGPU);
+
+    // CPU ---------------------------------------------------------------
+    cudaEventRecord(start, 0);
+
+    for (n = 0; n < N; n++)
+    {
+        for (m = 0; m < N; m++)
+        {
+            cc[m + n * N] = 0.f;
+            for (k = 0; k < N; k++) cc[m + n * N] += a[k + n * N] * bT[k + m * N]; //best CPU performance
+          //  for(k=0;k<N;k++) cc[m+n*N]+=a[k+n*N]*b[m+k*N]; // poor variant
+        }
+    }
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&timerValueCPU, start, stop);
+    printf("\n CPU calculation time %f msec\n", timerValueCPU);
+    printf("\n Rate %f x\n", timerValueCPU / timerValueGPU);
+
+    /*
+    out=fopen("c_gpu.dat","w"); out1=fopen("c_cpu.dat","w");
+    for(n=0;n<N;n++)
+    {for(m=0;m<N;m++)
+     {fprintf(out,"%e ",c[m+n*N]);
+      fprintf(out1,"%e ",cc[m+n*N]);
+     }
+     fprintf(out,"\n"); fprintf(out1,"\n");
+    }
+    fclose(out);  fclose(out1);
+   */
+
+    cudaFree(adev);
+    cudaFree(bdev);
+    cudaFree(cdev);
+    free(a);
+    free(b);
+    free(bT);
+    free(aT);
+    free(c);
+    free(cc);
+    // уничтожение переменных-событий
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
 }
