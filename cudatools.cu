@@ -1,4 +1,4 @@
-#define BLOCK_SIZE 128
+#define BLOCK_SIZE 16
 #include "Matrix.cpp" 
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,18 +11,25 @@ public:
     virtual ~FastMatrix() { std::cerr << "Destructor fastmatrix!\n"; };
 
     FastMatrix& CUDAMultiply(const FastMatrix& matr1, const FastMatrix& matr2);
-
+    FastMatrix& CUDAMultiply2(const FastMatrix& matr1, const FastMatrix& matr2);
+private:
+    T* data;
+    size_t length;
+    size_t maxrows;
+    size_t maxcols;
 };
 
 template<class T>
 FastMatrix<T>& FastMatrix<T>::CUDAMultiply(const FastMatrix& matr1, const FastMatrix& matr2){
     if (matr1.GetMaxCols() != matr2.GetMaxRows())
         throw std::exception("thease matricies is cannot be multiplied!");
-    //TODO - Make setters in parent class
+    
     this->SetMaxRows(matr1.GetMaxRows());
     this->SetMaxCols(matr2.GetMaxCols());
-    this->SetLenth(matr1.GetMaxRows(), matr2.GetMaxCols());
-    this->AllocateMatr(matr1.GetMaxRows() * matr2.GetMaxCols());
+    this->SetLenth(matr1.GetMaxRows() * matr2.GetMaxCols());
+    //this->AllocateMatr(matr1.GetMaxRows() * matr2.GetMaxCols());
+    delete[] this->GetData();
+    this->data = new T[matr1.GetMaxRows() * matr2.GetMaxCols()]();
     T dat;
     size_t i, j, k;
     for (i = 0; i < matr1.GetMaxRows(); i++) {
@@ -36,6 +43,101 @@ FastMatrix<T>& FastMatrix<T>::CUDAMultiply(const FastMatrix& matr1, const FastMa
     }
     return *this;
 }
+
+__global__ void kernel_shared_3(int* a, int* b,
+    int n, int* c)
+{
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x, ty = threadIdx.y;
+    int aBegin = n * BLOCK_SIZE * by;
+    int aEnd = aBegin + n - 1;
+    int bBegin = BLOCK_SIZE * bx;
+    int aStep = BLOCK_SIZE, bStep = BLOCK_SIZE * n;
+    int sum = 0;;
+    for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
+    {
+        __shared__ float as[BLOCK_SIZE][BLOCK_SIZE];
+        __shared__ float bs[BLOCK_SIZE][BLOCK_SIZE];
+        as[ty][tx] = a[ia + n * ty + tx];
+        bs[ty][tx] = b[ib + n * ty + tx];
+
+        __syncthreads(); 	// Synchronize to make sure the matrices are loaded 
+        for (int k = 0; k < BLOCK_SIZE; k++) sum += as[ty][k] * bs[k][tx];
+
+        __syncthreads(); 	// Synchronize to make sure submatrices not needed
+    }
+    c[n * BLOCK_SIZE * by + BLOCK_SIZE * bx + n * ty + tx] = sum;
+}
+template<class T>
+FastMatrix<T>& FastMatrix<T>::CUDAMultiply2(const FastMatrix& matr1, const FastMatrix& matr2) {
+    if (matr1.GetMaxCols() != matr2.GetMaxRows())
+        throw std::exception("thease matricies is cannot be multiplied!");
+
+    this->SetMaxRows(matr1.GetMaxRows());
+    this->SetMaxCols(matr2.GetMaxCols());
+    this->SetLenth(matr1.GetMaxRows() * matr2.GetMaxCols());
+    //this->AllocateMatr(matr1.GetMaxRows() * matr2.GetMaxCols());
+    delete[] this->GetData();
+    this->data = new T[matr1.GetMaxRows() * matr2.GetMaxCols()]();
+    T dat;
+
+    int m, n, k;
+    int N = matr1.GetMaxRows();
+    int M = matr2.GetMaxCols();
+    int numBytes = N * M * sizeof(T);
+    int* adev, * bdev, * cdev, * a, * b, * c, * cc, * bT, * aT;
+
+    a = (int*)malloc(numBytes);
+    b = (int*)malloc(numBytes);
+    bT = (int*)malloc(numBytes);
+    aT = (int*)malloc(numBytes);
+    c = (int*)malloc(numBytes);
+    cc = (int*)malloc(numBytes);
+
+    for (n = 0; n < N; n++)
+    {
+        for (m = 0; m < M; m++)
+        {
+            a[m + n * N] = matr1[m + n * N];
+            b[m + n * N] = matr2[m + n * N];
+            aT[n + m * N] = a[m + n * N];
+            bT[n + m * N] = b[m + n * N];
+        }
+    }
+
+    dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 blocks(N / threads.x, N / threads.y);
+
+    cudaMalloc((void**)&adev, numBytes);	// allocate DRAM
+    cudaMalloc((void**)&bdev, numBytes); // allocate DRAM
+    cudaMalloc((void**)&cdev, numBytes); // allocate DRAM
+    //----------------- GPU
+
+    // copy from CPU to DRAM
+    cudaMemcpy(adev, a, numBytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(bdev, b, numBytes, cudaMemcpyHostToDevice);
+
+    kernel_shared_3 << <blocks, threads >> > (adev, bdev, N, cdev);
+
+    cudaMemcpy(c, cdev, numBytes, cudaMemcpyDeviceToHost);
+    
+    
+    this->data = c;
+    
+    cudaFree(adev);
+    cudaFree(bdev);
+    cudaFree(cdev);
+    free(a);
+    free(b);
+    free(bT);
+    free(aT);
+    free(c);
+    free(cc);
+
+
+    return *this;
+}
+
 
 
 __global__ void kernel_global(float* a, float* b, int n, float* c, int k)
@@ -169,7 +271,7 @@ void testglob()
 
 
 // device code
-#define BLOCK_SIZE 16
+
 
 __global__ void kernel_shared(float* a, float* b,
     int n, float* c)
@@ -245,9 +347,9 @@ __global__ void kernel_global(float* a, float* b,
 
 
 FILE* outsh, * out1sh;
-void testshared()
+void testshared(int mul)
 {
-    int N = 1024;
+    int N = std::pow(2, mul);
     int m, n, k;
     float timerValueGPU, timerValueCPU;
     cudaEvent_t start, stop;

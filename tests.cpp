@@ -329,9 +329,27 @@ TEST(Simplemult3TEST, second) {
 
     ASSERT_EQ(resomp, resa);
 }
+TEST(OPENMPPerformanceest, stresstest) {
+    for (int power = 3; power < 13; power++) {
+        int dim = std::pow(2, power);
+        std::cout << "OpenMP test with dimention of matrix = " << dim << "\n";
+
+        Matrix<int> A(dim, dim);
+        A.fillRand(-1000000, 1000000);
+        Matrix<int> B(dim, dim);
+        B.fillRand(-1000000, 1000000);
+        Matrix<int> C(dim, dim);
+        auto start = std::chrono::high_resolution_clock::now();
+        C.simpleMult3(A, B);
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::cout << " Duration of omp method = " <<std::setprecision(5)<<
+            std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << " msec\n";
+    }
+
+}
+
 
 int main(int arg_v, char** arg_c) {
-    //test1(arg_v, arg_c);
     testing::InitGoogleTest(&arg_v, arg_c);
     return RUN_ALL_TESTS();
 }

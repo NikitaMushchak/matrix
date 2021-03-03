@@ -28,7 +28,15 @@ public:
     size_t GetMaxRows();
     size_t GetLength() const;
     size_t GetLength();
-   
+    void SetMaxCols(const size_t cols);
+//    void SetMaxCols(size_t cols);
+    void SetMaxRows(const size_t rows);
+    //void SetMaxRows(size_t rows);
+    void SetLenth(const size_t length);
+   // void SetLenth(size_t length);
+    void AllocateMatr(size_t length);
+    void AddData(T num, const size_t row, const size_t col);
+   // void AddData(T num, size_t row, size_t col);
     T* GetData();
    
     Matrix& simpleSumm(const Matrix& matr1, const Matrix& matr2);
@@ -57,15 +65,7 @@ private:
     size_t maxcols;
     //friend class FastMatrix;
 protected:
-    void SetMaxCols(const size_t cols);
-    void SetMaxCols(size_t cols);
-    void SetMaxRows(const size_t rows);
-    void SetMaxRows(size_t rows);
-    void SetLenth(const size_t length);
-    void SetLenth(size_t length);
-    void AllocateMatr(size_t length);
-    void AddData(T num, const size_t row, const size_t col);
-    void AddData(T num, size_t row, size_t col);
+   
 };
 
 template <class T>
@@ -154,14 +154,15 @@ void Matrix<T>::SetLenth(const size_t length){
 }
 template<class T>
 void Matrix<T>::AllocateMatr(size_t length){
-    data[] delete;
-    data = new T[length]();
+    //data[] delete;
+    //data = new T[length]();
 }
 template<class T>
 void Matrix<T>::AddData(T num, const size_t row, const size_t col){
     if (col >= maxcols || row >= maxrows) throw std::exception("col or row is out of range!");
-
-    data(row, col) = num;
+    
+   //data(row, col) = num;
+    data[row*maxcols + col] = num;
 }
 template<class T>
 T* Matrix<T>::GetData(){

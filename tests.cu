@@ -98,6 +98,19 @@ TEST(SimpleMultiplyTest, first) {
     res.fillValue(40);
     ASSERT_EQ(res, c);
 }
+TEST(CUDAMultiply2Test, first) {
+   /* FastMatrix<int> a(5, 5);
+    FastMatrix<int> b(5, 5);
+    a.fillValue(10);
+    b.fillValue(2);
+    FastMatrix<int>c(5,5);
+    c.CUDAMultiply2(a, b);
+    c.showMatrix();
+    FastMatrix<int> res(5, 5);
+    res.fillValue(40);
+    ASSERT_EQ(res, c);*/
+}
+
 int main(int arg_v, char** arg_c) {
     /*std::cout << "Global started\n";
     testglob();
@@ -105,6 +118,12 @@ int main(int arg_v, char** arg_c) {
     std::cout << "Shared started\n";
     testshared();
     std::cout << "Shared finished!\n";*/
+
+    for (int power = 3; power < 16; ++power) {
+        std::cout << "Results dimentions of matrix = " << std::pow(2, power) << '\n';
+        testshared(power);
+    }
+
     testing::InitGoogleTest(&arg_v, arg_c);
     return RUN_ALL_TESTS();
 }
