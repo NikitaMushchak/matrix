@@ -1,24 +1,15 @@
 cmake_minimum_required(VERSION 2.6)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 project(matrix_cuda LANGUAGES CXX CUDA)
-#if (msvc) {
-#  CMAKE_CXX_FLAGS += -openmp -arch:AVX -D "_CRT_SECURE_NO_WARNINGS"
-#  CMAKE_CXX_FLAGS_RELEASE *= -Ox
-#}
 
-#if(g++) {
-#  CMAKE_CXX_FLAGS += -fopenmp -mavx -fabi-version=0 -ffast-math
-#  CMAKE_LFLAGS += -fopenmp
-#  CMAKE_CXX_FLAGS_RELEASE *= -O3
-#}
 # GTest 
-#add_compile_options(/W4 /arch:SSE /arch:SSE2 /MT /MTd /MDd)
+
 enable_testing()
 find_package(GTest REQUIRED)
 if (GTest_FOUND)
     message(">> ${GTest_FOUND} ${GTest_VERSION}")
     include_directories(${GTEST_INCLUDE_DIRS})
-    #set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GTEST_BOTH_LIBRARIES}")
+
 endif()    
 
 # Unit Tests
@@ -43,11 +34,6 @@ if(CMAKE_THREAD_LIBS_INIT)
     message(">> ${THREADS_FOUND} ${THREADS_VERSION}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
 endif()
-# TODO remove this!!!!!
-include_directories(${PROJECT_SOURCE_DIR}/common/inc)
-
-add_executable(cudatest  cudatools.cu)
-target_link_libraries(cudatest ${CUDA_LIBRARIES})
 
 add_executable(testshgl tests.cu)
 add_test(testingshgl testingshgl)

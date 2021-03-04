@@ -7,8 +7,8 @@ class FastMatrix: public Matrix<T>
 {
 public:
     FastMatrix() : Matrix<T>() {}
-    FastMatrix(size_t N, size_t M) : Matrix<T>(N, M) { std::cerr << "create fast matrix!\n"; }
-    virtual ~FastMatrix() { std::cerr << "Destructor fastmatrix!\n"; };
+    FastMatrix(size_t N, size_t M) : Matrix<T>(N, M) { }
+    virtual ~FastMatrix() { ; };
 
     FastMatrix& CUDAMultiply(const FastMatrix& matr1, const FastMatrix& matr2);
     FastMatrix& CUDAMultiply2(const FastMatrix& matr1, const FastMatrix& matr2);
@@ -43,9 +43,9 @@ FastMatrix<T>& FastMatrix<T>::CUDAMultiply(const FastMatrix& matr1, const FastMa
     }
     return *this;
 }
-
-__global__ void kernel_shared_3(int* a, int* b,
-    int n, int* c)
+template <class T>
+__global__ void kernel_shared_3(T* a, T* b,
+    int n, T* c)
 {
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
@@ -53,11 +53,11 @@ __global__ void kernel_shared_3(int* a, int* b,
     int aEnd = aBegin + n - 1;
     int bBegin = BLOCK_SIZE * bx;
     int aStep = BLOCK_SIZE, bStep = BLOCK_SIZE * n;
-    int sum = 0;;
+    T sum = 0;
     for (int ia = aBegin, ib = bBegin; ia <= aEnd; ia += aStep, ib += bStep)
     {
-        __shared__ float as[BLOCK_SIZE][BLOCK_SIZE];
-        __shared__ float bs[BLOCK_SIZE][BLOCK_SIZE];
+        __shared__ T as[BLOCK_SIZE][BLOCK_SIZE];
+        __shared__ T bs[BLOCK_SIZE][BLOCK_SIZE];
         as[ty][tx] = a[ia + n * ty + tx];
         bs[ty][tx] = b[ib + n * ty + tx];
 
@@ -66,6 +66,7 @@ __global__ void kernel_shared_3(int* a, int* b,
 
         __syncthreads(); 	// Synchronize to make sure submatrices not needed
     }
+    //std::cout << " sum = " << sum << '\n';
     c[n * BLOCK_SIZE * by + BLOCK_SIZE * bx + n * ty + tx] = sum;
 }
 template<class T>
@@ -79,20 +80,19 @@ FastMatrix<T>& FastMatrix<T>::CUDAMultiply2(const FastMatrix& matr1, const FastM
     //this->AllocateMatr(matr1.GetMaxRows() * matr2.GetMaxCols());
     delete[] this->GetData();
     this->data = new T[matr1.GetMaxRows() * matr2.GetMaxCols()]();
-    T dat;
 
     int m, n, k;
     int N = matr1.GetMaxRows();
     int M = matr2.GetMaxCols();
     int numBytes = N * M * sizeof(T);
-    int* adev, * bdev, * cdev, * a, * b, * c, * cc, * bT, * aT;
+    T* adev, * bdev, * cdev, * a, * b, * c, * cc, * bT, * aT;
 
-    a = (int*)malloc(numBytes);
-    b = (int*)malloc(numBytes);
-    bT = (int*)malloc(numBytes);
-    aT = (int*)malloc(numBytes);
-    c = (int*)malloc(numBytes);
-    cc = (int*)malloc(numBytes);
+    a = (T*)malloc(numBytes);
+    b = (T*)malloc(numBytes);
+    bT = (T*)malloc(numBytes);
+    aT = (T*)malloc(numBytes);
+    c = (T*)malloc(numBytes);
+    cc = (T*)malloc(numBytes);
 
     for (n = 0; n < N; n++)
     {
@@ -100,8 +100,8 @@ FastMatrix<T>& FastMatrix<T>::CUDAMultiply2(const FastMatrix& matr1, const FastM
         {
             a[m + n * N] = matr1[m + n * N];
             b[m + n * N] = matr2[m + n * N];
-            aT[n + m * N] = a[m + n * N];
-            bT[n + m * N] = b[m + n * N];
+           /* aT[n + m * N] = a[m + n * N];
+            bT[n + m * N] = b[m + n * N];*/
         }
     }
 
@@ -117,20 +117,20 @@ FastMatrix<T>& FastMatrix<T>::CUDAMultiply2(const FastMatrix& matr1, const FastM
     cudaMemcpy(adev, a, numBytes, cudaMemcpyHostToDevice);
     cudaMemcpy(bdev, b, numBytes, cudaMemcpyHostToDevice);
 
-    kernel_shared_3 << <blocks, threads >> > (adev, bdev, N, cdev);
+    kernel_shared_3<T> << <blocks, threads >> > (adev, bdev, N, cdev);
 
     cudaMemcpy(c, cdev, numBytes, cudaMemcpyDeviceToHost);
     
-    
-    this->data = c;
-    
+    for(size_t i = 0 ; i< matr1.GetMaxRows() * matr2.GetMaxCols(); ++i)
+        this->AddData(c[i], i);
+
     cudaFree(adev);
     cudaFree(bdev);
     cudaFree(cdev);
     free(a);
     free(b);
-    free(bT);
-    free(aT);
+   /* free(bT);
+    free(aT);*/
     free(c);
     free(cc);
 

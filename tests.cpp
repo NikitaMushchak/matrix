@@ -85,7 +85,7 @@ TEST(SimpleompTest, f) {
 TEST(MatrixclassTest, zero) {
     Matrix<int> mat(1, 10);
     mat.fillRand(1, 10);
-    mat.showMatrix();
+    
 }
 TEST(simpleoutofrangeTest, outofrange) {
     Matrix<int> a(10, 10);
@@ -102,7 +102,18 @@ TEST(simpleoutofrangeTest, outofrange) {
     }
 
 }
+TEST(FillDataTEST, test) {
+    Matrix<int> a(5, 5);
+    Matrix<int> b(5, 5);
+    int* mass = new int[25];
+    for (int i = 0; i < 25; ++i) {
+        mass[i] = 25 - i;
+        b[i] = 25 - i;
+    }
 
+    a.FillData(mass);
+    ASSERT_EQ(a, b);
+}
 TEST(simpleSummTest, first) {
     Matrix<int> a(5, 5);
     Matrix<int> b(5, 5);
@@ -138,17 +149,6 @@ TEST(simpleMultTest, second) {
     ASSERT_EQ(res, c);
 }
 
-TEST(SimpleCopyTest, first) {
-    Matrix<int> a(5, 2);
-    Matrix<int> b(2, 10);
-    a.fillValue(10);
-    b.fillValue(2);
-    // TODO fix this!!!!!!!! 
-    //auto c = simpleMult2(a, b);
-    Matrix<int> res(5, 10);
-    res.fillValue(40);
-    //ASSERT_EQ(res, C);
-}
 TEST(SimpleTransposeTest, first) {
     Matrix<int> a(2, 5);
     a.fillValue(10);

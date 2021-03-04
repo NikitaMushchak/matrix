@@ -29,15 +29,18 @@ public:
     size_t GetLength() const;
     size_t GetLength();
     void SetMaxCols(const size_t cols);
-//    void SetMaxCols(size_t cols);
+
     void SetMaxRows(const size_t rows);
-    //void SetMaxRows(size_t rows);
+
     void SetLenth(const size_t length);
-   // void SetLenth(size_t length);
+
     void AllocateMatr(size_t length);
     void AddData(T num, const size_t row, const size_t col);
-   // void AddData(T num, size_t row, size_t col);
+    void AddData(T num, const size_t len);
+
     T* GetData();
+
+    void FillData(T* dat);
    
     Matrix& simpleSumm(const Matrix& matr1, const Matrix& matr2);
     Matrix& simpleMult(const Matrix& matr1, const Matrix& matr2);
@@ -62,10 +65,7 @@ private:
     T* data;
     size_t length;
     size_t maxrows;
-    size_t maxcols;
-    //friend class FastMatrix;
-protected:
-   
+    size_t maxcols;  
 };
 
 template <class T>
@@ -90,7 +90,7 @@ Matrix<T>::Matrix(Matrix<T>&& matr): length(matr.length), maxrows(matr.maxrows),
 template<class T>
 Matrix<T>::~Matrix() {
     delete[]data;
-    std::cerr << "destructor Matrix !\n";
+   
 }
 template <class T>
 void Matrix<T>::fillRand(int lowest, int highest) {
@@ -160,14 +160,25 @@ void Matrix<T>::AllocateMatr(size_t length){
 template<class T>
 void Matrix<T>::AddData(T num, const size_t row, const size_t col){
     if (col >= maxcols || row >= maxrows) throw std::exception("col or row is out of range!");
-    
-   //data(row, col) = num;
+
     data[row*maxcols + col] = num;
 }
+
+template<class T>
+void Matrix<T>::AddData(T num, const size_t len){
+    if (len >= length) throw std::exception("num of element is out of range!");
+
+    data[len] = num;
+}
+
 template<class T>
 T* Matrix<T>::GetData(){
     if (data == nullptr) return nullptr;
     else return data;
+}
+template<class T>
+void Matrix<T>::FillData(T* dat){
+    data = dat;
 }
 template <class T>
 size_t Matrix<T>::GetMaxRows() const{
@@ -224,9 +235,6 @@ Matrix<T>& Matrix<T>::simpleMult3(const Matrix<T>& matr1, const Matrix<T>& matr2
     if (matr1.GetMaxCols() != matr2.GetMaxRows())
         throw std::exception("thease matricies is cannot be multiplied!");
 
-   /* auto maxrows = matr1.GetMaxRows();
-    auto maxcols = matr2.GetMaxCols();
-    Matrix<T> matr3(maxrows, maxcols);*/
     maxrows = matr1.GetMaxRows();
     maxcols = matr2.GetMaxCols();
     length = matr1.GetMaxRows() * matr2.GetMaxCols();
@@ -260,14 +268,8 @@ Matrix<T>& Matrix<T>::simpleMult3(const Matrix<T>& matr1, const Matrix<T>& matr2
 template<class T>
 Matrix<T>& Matrix<T>::Transpose(const Matrix<T>& matr1){
     if (this == &matr1) {
-        //TODO realize
-        throw std::exception("don't transpose the same matrix");
-        /*
-        auto cols = matr1.GetMaxCols();
-        auto rows = matr1.GetMaxRows();
-        maxcols = rows
-        maxrows = cols;
-        return *this;*/
+          throw std::exception("don't transpose the same matrix");
+     
     }
     else {
         maxrows = matr1.GetMaxCols();
@@ -407,15 +409,7 @@ T& Matrix<T>::operator()(size_t row, size_t col) const{
         return data[row * maxcols + col];
     }
 }
-//template<class T>
-//T& Matrix<T>::operator()(const size_t row, const size_t col) {
-//    if (row >= maxrows || col >= maxcols) {
-//        throw std::out_of_range("indices is out of range");
-//    }
-//    else {
-//        return data[row * maxcols + col];
-//    }
-//}
+
 template<class T>
 T& Matrix<T>::operator[](size_t num){
     if (num >= length) {
@@ -456,37 +450,6 @@ Matrix<T> simpleMult2(const Matrix<T>& matr1, const Matrix<T>& matr2) {
     return matr3;
 }
 
-//template<class T>
-//Matrix<T>& simpleMult3(const Matrix<T>& matr1, const Matrix<T>& matr2) {
-//    if (matr1.GetMaxCols() != matr2.GetMaxRows())
-//        throw std::exception("thease matricies is cannot be multiplied!");
-//
-//    auto maxrows = matr1.GetMaxRows();
-//    auto maxcols = matr2.GetMaxCols();
-//    Matrix<T> matr3(maxrows, maxcols);
-//    Matrix<T> matr2tr; // transpose second matrix
-//    matr2tr.TSPOSE(matr2);
-//
-//    int NumProc = omp_get_num_procs();
-//    omp_set_num_threads(NumProc);
-//#pragma omp parallel
-//    {
-//        int i, j, k;
-//        T data;
-//#pragma omp for
-//        for (i = 0; i < matr1.GetMaxRows(); i++) {
-//            for (j = 0; j < matr2.GetMaxCols(); j++) {
-//                data = 0;
-//                for (k = 0; k < matr1.GetMaxCols(); k++) {
-//                    data += matr1[i * matr1.GetMaxCols() + k] * matr2tr[j * matr2tr.GetMaxCols() + k];
-//                }
-//                matr3[i * maxcols + j] = data;
-//            }
-//        }
-//    }
-//    this = matr3;
-//    return *this;
-//}
 
 template <class T>
 inline void transpose_scalar_block(T* A, T* B, const size_t lda, const size_t ldb, const size_t block_size) {
