@@ -34,7 +34,6 @@ if(CMAKE_THREAD_LIBS_INIT)
     message(">> ${THREADS_FOUND} ${THREADS_VERSION}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
 endif()
-
 add_executable(testshgl tests.cu)
 add_test(testingshgl testingshgl)
 # Link test executable against gtest & gtest_main

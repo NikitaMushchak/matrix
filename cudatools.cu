@@ -47,6 +47,7 @@ template <class T>
 __global__ void kernel_shared_3(T* a, T* b,
     int n, T* c)
 {
+
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
     int aBegin = n * BLOCK_SIZE * by;
@@ -438,7 +439,7 @@ void testshared(int mul)
     free(aT);
     free(c);
     free(cc);
-    // уничтожение переменных-событий
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ-пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 

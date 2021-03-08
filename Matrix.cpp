@@ -59,6 +59,7 @@ public:
 
     const T& operator()(size_t row, size_t col);
     T& operator()(size_t row, size_t col) const;
+    //T& operator()(size_t row, size_t col);
     T& operator [](size_t num);
     T& operator [](size_t num) const;
 private:
@@ -409,6 +410,15 @@ T& Matrix<T>::operator()(size_t row, size_t col) const{
         return data[row * maxcols + col];
     }
 }
+//template<class T>
+//T& Matrix<T>::operator()(size_t row, size_t col){
+//    if (row >= maxrows || col >= maxcols) {
+//        throw std::out_of_range("operator ()indices is out of range");
+//    }
+//    else {
+//        return data[row * maxcols + col];
+//    }
+//}
 
 template<class T>
 T& Matrix<T>::operator[](size_t num){
@@ -472,4 +482,206 @@ inline void transpose_block(T* A, T* B, const size_t n, const size_t m, const si
             transpose_scalar_block(&A[i * lda + j], &B[j * ldb + i], lda, ldb, block_size);
         }
     }
+}
+// n - is current dim of A
+void getCofactor(Matrix<int>& A, Matrix<int>& temp, int p, int q, int n) {
+    int i = 0, j = 0;
+
+    // Looping for each element of the matrix
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            //  Copying into temporary matrix only those element
+            //  which are not in given row and column
+            if (row != p && col != q) {
+//                temp(i,j++) = A(row,col);
+                temp.AddData(A(row, col), i, j++);
+                // Row is filled, so increase row index and
+                // reset col index
+                if (j == n - 1){
+                    j = 0;
+                    i++;
+                }
+            }
+        }
+    }
+}
+
+void getCofactorOMP(Matrix<int>& A, Matrix<int>& temp, int p, int q, int n) {
+    int i = 0, j = 0;
+    int NumProc = omp_get_num_procs();
+    omp_set_num_threads(NumProc);
+#pragma omp parallel for
+    // Looping for each element of the matrix
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            //  Copying into temporary matrix only those element
+            //  which are not in given row and column
+            if (row != p && col != q) {
+//                temp(i,j++) = A(row,col);
+                temp.AddData(A(row, col), i, j++);
+                // Row is filled, so increase row index and
+                // reset col index
+                if (j == n - 1){
+                    j = 0;
+                    i++;
+                }
+            }
+        }
+    }
+}
+
+/* Recursive function for finding determinant of matrix. 
+   n is current dimension of A[][]. */
+int determinant(Matrix<int>& A, int n){ 
+    int D = 0; // Initialize result 
+    int N = A.GetMaxCols();
+    //  Base case : if matrix contains single element 
+    if (n == 1) 
+        return A(0,0); 
+  
+    //int temp[N][N]; // To store cofactors 
+    Matrix<int>temp(N,N);
+    int sign = 1;  // To store sign multiplier 
+  
+     // Iterate for each element of first row 
+    for (int f = 0; f < n; f++){ 
+        // Getting Cofactor of A[0][f] 
+        getCofactor(A, temp, 0, f, n); 
+        D += sign * A(0,f) * determinant(temp, n - 1); 
+  
+        // terms are to be added with alternate sign 
+        sign = -sign; 
+    } 
+  
+    return D; 
+}
+/* Recursive function for finding determinant of matrix.
+ n is current dimension of A[][]. */
+int determinantOMP(Matrix<int>& A, int n){
+    int D = 0; // Initialize result
+    int N = A.GetMaxCols();
+    //  Base case : if matrix contains single element
+    if (n == 1)
+        return A(0,0);
+
+    //int temp[N][N]; // To store cofactors
+    Matrix<int>temp(N,N);
+    int sign = 1;  // To store sign multiplier
+    int NumProc = omp_get_num_procs();
+    omp_set_num_threads(NumProc);
+#pragma omp parallel for
+    // Iterate for each element of first row
+    for (int f = 0; f < n; f++){
+        // Getting Cofactor of A[0][f]
+        getCofactorOMP(A, temp, 0, f, n);
+        D += sign * A(0,f) * determinant(temp, n - 1);
+
+        // terms are to be added with alternate sign
+        sign = -sign;
+    }
+
+    return D;
+}
+// Function to get adjoint of A[N][N] in adj[N][N]. 
+void adjoint(Matrix<int>& A, Matrix<int>& adj){
+    size_t N = A.GetMaxCols();
+    if (N == 1){ 
+        adj[0] = 1;
+        return; 
+    } 
+  
+    // temp is used to store cofactors of A[][] 
+    int sign = 1;//, temp[N][N]; 
+    Matrix<int> temp(N,N);
+    for (int i=0; i<N; i++){ 
+        for (int j=0; j<N; j++){ 
+            // Get cofactor of A[i][j] 
+            getCofactor(A, temp, i, j, N); 
+  
+            // sign of adj[j][i] positive if sum of row 
+            // and column indexes is even. 
+            sign = ((i+j)%2==0)? 1: -1; 
+  
+            // Interchanging rows and columns to get the 
+            // transpose of the cofactor matrix 
+//            adj[j][i] = (sign)*(determinant(temp, N-1));
+            adj.AddData((sign)*(determinant(temp, N-1)), j, i);
+        } 
+    } 
+}
+// Function to get adjoint of A[N][N] in adj[N][N].
+void adjointOMP(Matrix<int>& A, Matrix<int>& adj){
+    size_t N = A.GetMaxCols();
+    if (N == 1){
+        adj[0] = 1;
+        return;
+    }
+
+    // temp is used to store cofactors of A[][]
+    int sign = 1;//, temp[N][N];
+    Matrix<int> temp(N,N);
+    int NumProc = omp_get_num_procs();
+    omp_set_num_threads(NumProc);
+#pragma omp parallel for
+    for (int i=0; i<N; i++){
+        for (int j=0; j<N; j++){
+            // Get cofactor of A[i][j]
+            getCofactorOMP(A, temp, i, j, N);
+
+            // sign of adj[j][i] positive if sum of row
+            // and column indexes is even.
+            sign = ((i+j)%2==0)? 1: -1;
+
+            // Interchanging rows and columns to get the
+            // transpose of the cofactor matrix
+//            adj[j][i] = (sign)*(determinant(temp, N-1));
+            adj.AddData((sign)*(determinant(temp, N-1)), j, i);
+        }
+    }
+}
+// Function to calculate and store inverse, returns false if 
+// matrix is singular 
+bool inverse(Matrix<int>& A, Matrix<float>& inverse){ 
+    // Find determinant of A[][]
+    size_t N = A.GetMaxCols();
+    int det = determinant(A, N); 
+    if (det == 0){ 
+        std::cout << "Singular matrix, can't find its inverse";
+        return false; 
+    } 
+  
+    // Find adjoint 
+    //int adj[N][N];
+    Matrix<int> adj(N,N); 
+    adjoint(A, adj); 
+  
+    // Find Inverse using formula "inverse(A) = adj(A)/det(A)" 
+    for (int i=0; i<N; i++) 
+        for (int j=0; j<N; j++) 
+//            inverse(i,j) = adj(i,j)/float(det);
+            inverse.AddData(adj(i,j)/float(det), i, j);
+  
+    return true; 
+}
+
+bool inverseOMP(Matrix<int>& A, Matrix<float>& inverse){
+    // Find determinant of A[][]
+    size_t N = A.GetMaxCols();
+    int det = determinantOMP(A, N);
+    if (det == 0){
+        std::cout << "Singular matrix, can't find its inverse";
+        return false;
+    }
+
+    // Find adjoint
+    //int adj[N][N];
+    Matrix<int> adj(N,N);
+    adjointOMP(A, adj);
+
+    // Find Inverse using formula "inverse(A) = adj(A)/det(A)"
+    for (int i=0; i<N; i++)
+        for (int j=0; j<N; j++)
+            inverse.AddData(adj(i,j)/float(det), i, j);
+
+    return true;
 }

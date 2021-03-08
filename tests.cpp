@@ -114,6 +114,71 @@ TEST(FillDataTEST, test) {
     a.FillData(mass);
     ASSERT_EQ(a, b);
 }
+TEST(inverseTest, test) {
+   
+
+    //int A[N][N] = { {2, 7, 3},
+    //                {3, 9, 4},
+    //                {1, 5, 3}
+    //                 };
+
+    //int adj[N][N];  // To store adjoint of A[][] 
+
+    //float inv[N][N]; // To store inverse of A[][] 
+
+    //std::cout << "Input matrix is :\n";
+    //display(A);
+
+    //std::cout << "\nThe Adjoint is :\n";
+    //adjoint(A, adj);
+    //display(adj);
+
+    //std::cout << "\nThe Inverse is :\n";
+    //if (inverse(A, inv))
+    //    display(inv);
+   
+}
+
+TEST(inverseTest, test2) {
+    const int N = 3;
+
+    int *A = new int[N*N] { 2, 7, 3,
+                            3, 9, 4,
+                            1, 5, 3
+    };
+    Matrix<int> Am(N,N);
+    Am.FillData(A);
+    Am.showMatrix();
+//    int* adj = new int[N*N];  // To store adjoint of A[][]
+    Matrix<int> adj(N,N);
+//    float* inv = new float[N*N]; // To store inverse of A[][]
+    Matrix<float> inv(N,N);
+
+    adjoint(Am,adj);
+
+    if(inverse(Am,inv))
+        inv.showMatrix();
+}
+//TEST(inverseTest, test3omp) {
+//    const int N = 3;
+//
+//    int *A = new int[N*N] { 2, 7, 3,
+//                            3, 9, 4,
+//                            1, 5, 3
+//    };
+//    Matrix<int> Am(N,N);
+//    Am.FillData(A);
+//    Am.showMatrix();
+////    int* adj = new int[N*N];  // To store adjoint of A[][]
+//    Matrix<int> adj(N,N);
+////    float* inv = new float[N*N]; // To store inverse of A[][]
+//    Matrix<float> inv(N,N);
+//
+//    adjointOMP(Am,adj);
+//
+//    if(inverseOMP(Am,inv))
+//        inv.showMatrix();
+//}
 TEST(simpleSummTest, first) {
     Matrix<int> a(5, 5);
     Matrix<int> b(5, 5);
